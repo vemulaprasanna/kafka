@@ -1,0 +1,262 @@
+Scope
+Creating the the yaml files
+Connecting to the application
+Prerequisites
+Access to GCP
+Knowledge on kubernetes
+Accessing the application
+Knowledge on creating the load balancer and setting up DNS
+
+Procedure
+
+Login to GCP and select the desired project.
+Click on the kubernetes Engine and select the cluster.
+Click on the three dots on the right side of the cluster and click on the connect.
+To access the cluster copy the command line in the connect to cluster page
+SSH into the Bastion host (instance-1)  and paste the copied command.
+Create namespace 
+Command: kubectl create ns  <namespace>
+
+Create a deployment kafka yaml file.
+First do  vi kafka.yaml
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: kafka
+  labels:
+    app: kafka
+spec:
+  replicas: 3
+  serviceName: kafka
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: wurstmeister/kafka:2.11-1.1.1
+          ports:
+            - containerPort: 9094
+          env:
+            - name: HOSTNAME_COMMAND
+              value: "echo \"$HOSTNAME.kafka.kafka.svc.cluster.local\""
+            - name: BROKER_ID_COMMAND
+              value: "hostname | awk -F'-' '{print $2}'"
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: "zk-0.zk-hs.kafka.svc.cluster.local:2181,\
+                      zk-1.zk-hs.kafka.svc.cluster.local:2181,\
+                      zk-2.zk-hs.kafka.svc.cluster.local:2181"
+            - name: KAFKA_LISTENERS
+              value: "INSIDE://:9092,OUTSIDE://:9094"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "INSIDE://:9092,OUTSIDE://_{HOSTNAME_COMMAND}:9094"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT"
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: "INSIDE"
+            - name: KAFKA_PORT
+              value: "9092"
+            - name: KAFKA_ADVERTISED_HOST_NAME
+              value: echo "$HOSTNAME.kafka.kafka.svc.cluster.local"
+            - name: KAFKA_LOG_DIRS
+              value: "/kafka-logs"
+            - name: JMX_PORT
+              value: "9999"
+          volumeMounts:
+            - name: logs
+              mountPath: /kafka-logs
+              subPath: logs
+  volumeClaimTemplates:
+    - metadata:
+        name: logs
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: kafka
+  labels:
+    app: kafka
+spec:
+  clusterIP: None
+  ports:
+  - port: 9092
+    name: kafka-port
+  selector:
+    app: kafka
+
+Before creating a yaml file, we need to check configuration and make a few changes in the yaml file.
+- change name-space in the entire yaml file 
+- And in the environment variables we have namespace in the paths also to change .
+Now apply the yaml file by using 
+	Command: kubectl create -f kafka.yaml -n <name-space>
+
+Create a deployment zookeeper yaml file.
+	First do  vi zookeper.yaml
+	
+	apiVersion: v1
+kind: Service
+metadata:
+  name: zk-hs
+  namespace: kafka
+  labels:
+    app: zk
+spec:
+  ports:
+  - port: 2888
+    name: server
+  - port: 3888
+    name: leader-election
+  clusterIP: None
+  selector:
+    app: zk
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zk-cs
+  namespace: kafka
+  labels:
+    app: zk
+spec:
+  ports:
+  - port: 2181
+    name: client
+  selector:
+    app: zk
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: zk-pdb
+  namespace: kafka
+spec:
+  selector:
+    matchLabels:
+      app: zk
+  maxUnavailable: 1
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zk
+  namespace: kafka
+spec:
+  selector:
+    matchLabels:
+      app: zk
+  serviceName: zk-hs
+  replicas: 3
+  updateStrategy:
+    type: RollingUpdate
+  podManagementPolicy: OrderedReady
+  template:
+    metadata:
+      labels:
+        app: zk
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: "app"
+                    operator: In
+                    values:
+                    - zk
+              topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: kubernetes-zookeeper
+        imagePullPolicy: Always
+        image: "k8s.gcr.io/kubernetes-zookeeper:1.0-3.4.10"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "0.5"
+        ports:
+        - containerPort: 2181
+          name: client
+        - containerPort: 2888
+          name: server
+        - containerPort: 3888
+          name: leader-election
+        command:
+        - sh
+        - -c
+        - "start-zookeeper \
+          --servers=3 \
+          --data_dir=/var/lib/zookeeper/data \
+          --data_log_dir=/var/lib/zookeeper/data/log \
+          --conf_dir=/opt/zookeeper/conf \
+          --client_port=2181 \
+          --election_port=3888 \
+          --server_port=2888 \
+          --tick_time=2000 \
+          --init_limit=10 \
+          --sync_limit=5 \
+          --heap=512M \
+          --max_client_cnxns=60 \
+          --snap_retain_count=3 \
+          --purge_interval=12 \
+          --max_session_timeout=40000 \
+          --min_session_timeout=4000 \
+          --log_level=INFO"
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "zookeeper-ready 2181"
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "zookeeper-ready 2181"
+          initialDelaySeconds: 10
+          timeoutSeconds: 5
+        volumeMounts:
+        - name: datadir
+          mountPath: /var/lib/zookeeper
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi
+
+	Now apply the yaml file using 
+	Command: kubectl create -f zookeeper.yaml -n <name-space>
+
+Check whether the pod has come to ready state.
+ 	Kubectl get po -n <name-space>
+
+    
+
+
+
+
+
+
+
+
