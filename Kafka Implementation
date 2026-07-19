@@ -1,0 +1,103 @@
+Prerequisites
+=============
+1. Create 2n+1 VMs along with external ip and 2 additional disks as 10Gib & 10Gib
+             - data disk
+             - zklogs disk
+2. Create firewall rule
+
+Documentation to install Kafka and Zookeeper step by step procedure:
+====================================================================
+SSH as a root user in every VM and process the implementation.
+1.	 Update and install java
+○	sudo apt-get update && sudo apt-get install openjdk-8-jdk
+2.	Create kafka-startup-script.sh file
+●	vi kafka-startup-script.sh
+○	sudo mkfs.ext4 -m 0 -F -E lazy_itable_init=0,lazy_journal_init=0,discard /dev/sdb
+○	sudo mkfs.ext4 -m 0 -F -E lazy_itable_init=0,lazy_journal_init=0,discard /dev/sdc
+○	sudo mkdir -p /mnt/disks/data
+○	sudo mkdir -p /mnt/disks/zk-logs
+○	sudo mount -o discard,defaults /dev/sdb /mnt/disks/data
+○	sudo mount -o discard,defaults /dev/sdc /mnt/disks/zk-logs
+○	sudo cp /etc/fstab /etc/fstab.backup
+○	echo UUID=$(sudo blkid -s UUID -o value /dev/sdb) /mnt/disks/data ext4 discard,defaults,nofail 0 2 | sudo tee -a /etc/fstab
+○	echo UUID=$(sudo blkid -s UUID -o value /dev/sdc) /mnt/disks/zk-logs ext4 discard,defaults,nofail 0 2 | sudo tee -a /etc/fstab
+
+●	chmod +x kafka-startup-script.sh
+3.	Create kafka-install.sh file
+○	    vi kafka-install.sh
+○	    chmod +x kafka-install.sh
+         4.   Start the zookeeper and kafka
+●	sudo systemctl enable zookeeper.service
+●	sudo systemctl enable kafka.service
+
+        5.  Create a jmxremote.password file.
+●	    cd /opt/kafka
+●	    vi jmxremote.password
+●	    monitorRole tenfold                # paste it in the file
+
+       6.  change permissions of  jmxremote.password file.
+●	    chown kafka:kafka jmxremote.password
+●	    chmod 600 jmxremote.password
+
+      7. add ip and hostname
+●	    # added ips host-names at bottom of file.
+●	    vi /etc/hosts
+ 			<internal-IPn> <hostname-n>             # paste all IP-addr and hostnames in the file
+●	    source ~/.bashrc                                                     # Refresh the resources
+
+
+   8. check and update file if anything miss
+cat /opt/kafka/config/server.properties
+        broker.id=0                                            		 	# Where id= 0,1,...
+        broker.rack=zone                                 		 # add zone if it is not there
+        listeners=PLAINTEXT://:9092
+        advertised.listeners=PLAINTEXT://<Internal-ip>:9092     # add Internal Ip add if not there
+        zookeeper.connect=<host-names:port-adds>               	 # add host-nm and port-add of all vms 
+        num.network.threads=16
+        num.io.threads=8
+        socket.send.buffer.bytes=102400
+        socket.receive.buffer.bytes=102400
+        socket.request.max.bytes=104857600
+        log.dirs=/var/log/kafka
+        num.partitions=3
+        num.recovery.threads.per.data.dir=1
+        log.retention.hours=168
+        log.segment.bytes=1073741824
+        log.retention.check.interval.ms=300000
+        zookeeper.connection.timeout.ms=6000
+        delete.topic.enable=true
+        auto.create.topics.enable=true
+        default.replication.factor=3
+        num.replica.fetchers=4
+        log.message.timestamp.type=LogAppendTime
+
+
+
+9. Start and check status of zookeeper and kafka
+    systemctl daemon-reload
+s-1:
+    systemctl start zookeeper.service
+    systemctl status zookeeper.service
+s-2:
+    systemctl start kafka.service
+     systemctl status kafka.service
+s-3:
+     systemctl restart zookeeper.service
+    systemctl restart kafka.service
+
+ 10. Create and Test the topic
+# Create topic
+./bin/kafka-topics.sh --create --topic <topic-name> --partitions 3 --zookeeper <host-name:2181> --replication-factor 3
+
+# Describe partitions, replication, leader brokers for selected topic
+./bin/kafka-topics.sh --describe --zookeeper <host-name:2181> --topic <topic-name>
+	
+	# To push messages into topic
+	./bin/kafka-console-producer.sh --broker-list  hostname/internal-ip:9092 --topic topic-name
+
+	# To retrieve messages from the topic 
+	./bin/kafka-console-consumer.sh --zookeeper hostname/internal-ip:2181 --topic topic-name --from-beginning
+
+References:
+===========
+https://strimzi.io/blog/2021/06/08/broker-tuning/           
