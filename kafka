@@ -1,0 +1,141 @@
+Procedure 
+
+STEP 00: Goto GCP and select respective project you want to change
+
+STEP 01: Select compute engine and filter kafka vms
+	
+STEP 02: SSH into anyone of kafka vm
+
+STEP 03: Goto specified path /opt/kafka_2.xxx
+
+
+STEP 06: Run following commands on container level and get information about the kafka services
+
+Describe topic:
+bin/kafka-topics.sh --describe --zookeeper localhost:2181 --topic org_xxxxxxxxxxx
+
+Delete topic:
+bin/kafka-topics.sh --delete --zookeeper localhost:2181 --topic org_xxxxxxxxxxx 
+
+Describe again and restart http-producer:
+To check cluster:
+Kubectx
+
+To get deploy:
+Kubectl get deploy
+
+To restart deploy:
+kubectl rollout restart deploy <deploy_name>
+
+To check pods:
+Kubectl get pods | grep <deploy_name>
+
+Create topic:
+bin/kafka-topics.sh --create --zookeeper localhost:2181 --topic org_xxxxxxxxxxx
+
+Increase partition:
+bin/kafka-topics.sh --alter --zookeeper localhost:2181 --topic org_xxxxxxxxxxx --partitions <new_partition_count>
+
+Describe again and restart http-producer:
+To check cluster:
+Kubectx
+
+To get deploy:
+Kubectl get deploy
+
+To restart deploy:
+kubectl rollout restart deploy <deploy_name>
+
+To check pods:
+Kubectl get pods | grep <deploy_name>
+
+
+
+
+
+KAFKA
+
+
+maximum 200,000 partitions per Kafka cluster (in total; distributed over many topics) resulting in a maximum of 50 brokers per Kafka cluster.
+
+ISR shrink / expand :
+Whenever borker/server down - ISR for some of the partitions will shrink.
+If broker/server goes up then isr for that partitions will expand.
+
+
+
+opt/kafka/bin/
+         
+	./kafka.topics.sh --list --zookeeper localhost:2181
+
+cd /var/log syslog
+cd /opt/kafka
+
+Default port:
+9092
+Kafka service ports
+
+Kafka uses a binary protocol over TCP. The protocol defines all APIs as request response message pairs.
+
+cat /var/log/syslog
+cat /var/log/syslog | tail -f
+cat /var/log/syslog | tail -f 100
+
+cat /var/log/zookeeper/zookeeper.log
+cat /var/log/zookeeper/zookeeper_trace.log
+
+
+
+
+gcloud compute instances create kafka-poc-2 --project=tenfold-svcs-qa --zone=us-central1-c --machine-type=e2-medium --network-interface=address=35.184.88.228,network-tier=PREMIUM,private-network-ip=10.128.16.16,subnet=data-network-uscentral1 --maintenance-policy=MIGRATE --provisioning-model=STANDARD --service-account=758686946067-compute@developer.gserviceaccount.com --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append --tags=kafka --create-disk=auto-delete=yes,boot=yes,device-name=kafka-poc-2,image=projects/ubuntu-os-cloud/global/images/ubuntu-1804-bionic-v20230131,mode=rw,size=100,type=projects/tenfold-svcs-qa/zones/us-central1-c/diskTypes/pd-standard --create-disk=device-name=kafka-poc-2-data,mode=rw,name=kafka-poc-2-data,size=10,type=projects/tenfold-svcs-qa/zones/us-central1-c/diskTypes/pd-standard --create-disk=device-name=kafka-po-2-zklogs,mode=rw,name=kafka-po-2-zklogs,size=10,type=projects/tenfold-svcs-qa/zones/us-central1-c/diskTypes/pd-standard --no-shielded-secure-boot --shielded-vtpm --shielded-integrity-monitoring --reservation-affinity=any
+
+
+rm -f __consumer_offsets-*
+
+
+
+
+==================================================
+
+kafka versions document
+kafka - 0.10.1
+kafka - 3.0
+
+
+/kafka_2.11-0.10.0.1.jar
+
+
+/opt/kafka/bin/../libs/zkclient-0.8.jar:/opt/kafka/bin/../libs/zookeeper-3.4.6.jar
+
+
+
+
+
+
+
+
+
+Org id : 648a8ad5a790e80f8979bee3  [QA patch]RCMVP
+Org id - 648a8af5a790e8112d79bee8 [Nice][Qapatch]
+
+
+bin/kafka-topics.sh --list --zookeeper kafka-tenfold-gce-east-worker-2:2181,kafka-tenfold-gce-east-worker-3:2181,kafka-tenfold-gce-east-worker-4:2181,kafka-tenfold-gce-east-worker-5:2181,kafka-tenfold-gce-east-worker-6:2181 | grep 602eca8cbefce0000689f94c
+
+bin/kafka-topics.sh --list --zookeeper kafka-qa-useast1-worker4:2181,kafka-qa-useast1-worker5:2181,kafka-qa-useast1-worker6:2181 | grep 602eca8cbefce0000689f94c
+
+
+bin/kafka-topics.sh --list --zookeeper kafka-qapatch-useast1-worker3:2181,kafka-qapatch-useast1-worker4:2181 | grep 648a8ad5a790e80f8979bee3
+
+bin/kafka-topics.sh --list --zookeeper kafka-qapatch-useast1-worker3:2181,kafka-qapatch-useast1-worker4:2181 
+
+
+
+
+
+Analytics Solution
+1) Application coming  up with new Elastic Search as a component
+2)  Create Indices that is compatible with ES 8.6.2 - ready to accept calls data pushed by tailer
+3)  Tailer needs to deployed (Pritpal) in alpha environment - should read data form atlas and send this to ES 8.6.2
+4) Dashboard ability to reasd ES 8.6.2 and display call analytics
+5) Ensure tailer can continue to work with AWS ES 5.6
+
