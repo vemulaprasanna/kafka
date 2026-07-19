@@ -1,0 +1,145 @@
+Procedure
+Installation:
+Step-1: Update the system and install java
+sudo apt-get update && sudo apt-get install openjdk-8-jdk
+
+Step-2: Become authenticated user
+gcloud auth login
+
+Step-3: Download coordinator from bucket
+gsutil cp gs://tenfold-prod-db-logs/coordinator-1.0.5-SNAPSHOT.tar.gz /opt
+
+Step-4: Extract coordinator to opt folder
+sudo tar -xvz -f /opt/coordinator-1.0.5-SNAPSHOT.tar.gz
+Step-5: Add coordinator users
+sudo useradd -m coordinator
+sudo addgroup coordinator
+
+Step-6: Edit logback.xml file
+Go to /opt/coordinator-1.0.5-SNAPSHOT
+Change the needed configuration in the logback.xml file.
+
+Step-7: Change owners for coordinator Directories
+sudo chown -fR coordinator:coordinator /opt/coordinator-1.0.5-SNAPSHOT
+
+Step-8: Create soft link for coordinator user
+sudo ln -sf /opt/coordinator-1.0.5-SNAPSHOT /opt/coordinator
+sudo chown -fR coordinator:coordinator /opt/coordinator
+
+Step-9: Create coordinator.service system file
+[Unit]
+Description=Coordinator
+After=network-online.target 
+
+[Service]
+ExecStart=/opt/coordinator/coordinator
+Restart=on-abort
+User=coordinator
+
+[Install]
+WantedBy=multi-user.target
+
+sudo mv $(pwd)/coordinator.service /etc/systemd/system/
+
+Step-10: Enable coordinator.service system file
+sudo systemctl enable coordinator.service
+
+Step-11: Create config.properties file with the following information
+Kafka DNS names
+Default environment
+
+Cutover Process:
+Step 1: Start newer coordinator service in each VM
+Start the coordinator service in the newer VMs after setting the proper default environment.
+
+Step 2: Stop older coordinator service in each VM
+Stopped the coordinator service in the old vms.
+Restart the services
+Check the calls in the respective environment.
+Check GCP and coordinators logs 
+
+Rollback Process:
+Start the Older coordinator services from  vm level
+Stopped the new VMs coordinator services.
+Restart the pipeline
+Check the calls in the respective environment.
+Check GCP and coordinators logs
+
+Restart Services after cutover:
+We need to restart pipeline on the following deployments:
+api
+dashboard
+processors
+schedulers
+producers
+tracker
+tailer
+broadsoft, signup-page, realtime-db, gateway
+COMMAND:
+kubectl rollout restart deploy <All services above mentioned>
+
+Note: Make sure to place IB/OB calls in the environment before and after the cutover
+
+
+===============
+Procedure
+Step-1:
+SSH into Mongodb VM in production Environment as a root user.
+Step-2:
+Change the directory to /opt
+	cd /opt
+Create a folder as deletion to store respective script files and folders.
+	mkdir deletion
+Create a folder for call purge for each organization
+	mkdir OrgWiseDeletion
+Step-3:
+Create .js files in respective folder to store scripts
+In OrgWiseDeletion folder
+Create script files
+vi mongoscript.sh 
+		#bash
+PATH=/var/lib/mongodb-mms-automation/bin:$PATH
+mongo mongodb-dev.tenfold.com:27017/callinize query.js
+
+
+vi query.js
+db.auth('Need username','Need password');
+
+let selected = ['63eb93f2237f3754fe072731']
+
+print('########################################################');
+print('Starting Deletion At, ' + Date());
+for (let i = 0; i < selected.length; i++) {
+	var counter=0;
+	var remainingrecords = 0;
+	var totalrecords = db.calls.find({ "_organization" : ObjectId(selected[i]), createdDate: { $gt : new Date('2023-03-04'), $lt : new Date('2023-03-04')}}).count();
+	print('──────────────────────────────────────────────────────────────────────────────');
+	print(selected[i] + ' Total Records : '+ totalrecords);
+	db.calls.find({ "_organization" : ObjectId(selected[i]), createdDate: { $gt : new Date('2023-03-04'), $lt : new Date('2023-03-04')} }).forEach( function(x){
+     		db.calls.remove({_id : x._id});
+     		counter = counter+1;
+     		if(counter==1000000){
+          		remainingrecords = db.calls.find({ "_organization" : ObjectId(selected[i])}).count();
+          		print((100 - (remainingrecords/totalrecords)*100) + ' % Deleted, At ' + Date());counter = 0;
+     		}
+	});
+	print('──────────────────────────────────────────────────────────────────────────────');
+}
+print('Completed Deletion At, ' + Date());
+print('########################################################');
+Now change the mongoscript.sh to executable file
+chmod +x mongoscript.sh
+Run the purging bash script
+			nohup ./mongoscript.sh &
+To check the output.
+Go into the cd  /opt/deletion/OrgWiseDeletion
+Now give command: ls -la
+You can absorb nohup.out file
+Cmd: tail -100f nohup.out
+Note: Update/Adjust query.js file as per requirement
+
+References
+https://docs.google.com/document/d/1MFAew9HzqiLtkVvSdkXCMXQPEa6jX6L2iZhUeMiNnRs/edit#    -- Link about Purge calls for yearly wise SOP
+
+
+
