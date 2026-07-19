@@ -1,0 +1,156 @@
+
+
+
+Tenfold
+ Kafka UI Implementation
+
+
+
+
+
+
+
+
+
+
+
+
+Prerequisites
+Outline the information required before proceeding with the listed procedure
+Access to Tenfold Resources
+
+Jira 
+https://l-p.atlassian.net/browse/TFCO-6791 - Dev one
+
+Procedure
+Steps-1:
+	Add url to Google auth console
+		- Go to the GCP Console, click on the navigation menu.
+		- Select APIs and Services → Credentials → under OAuth → add in respective web client
+
+Steps-2: 
+Create namespace from bastion host on respective environment
+	kubectl create namespace kafka-ui
+
+Steps-3: 
+Create and update value.yaml file 
+Fill with  cluster, auth and RBAC details as per requirement
+For Auth:
+		Go to the GCP Console, click on the navigation menu.
+		Select APIs and Services → Credentials
+
+YAML details:
+---
+service:
+  type: LoadBalancer
+  nodePort: <>
+yamlApplicationConfig:
+  kafka:
+    clusters:
+      - name: dev
+        bootstrapServers: 
+<server1 name>:9092,<server2 name>:9092, … , <serverN name>:9092
+  auth:
+    type: OAUTH2
+    oauth2:
+      client:
+        google:
+          provider: google
+          clientId: <>
+          clientSecret: <>
+          user-name-attribute: email
+          redirect-uri: <>
+          custom-params:
+            type: google
+            allowedDomain: <>
+  rbac:
+    roles:
+      - name: admins
+        clusters:
+          - <environment name>
+        subjects:
+          - provider: oauth_google
+            type: user
+            value: <user-id>
+          - provider: oauth_google
+            type: user
+            value: <user-id>
+        permissions:
+          - resource: applicationconfig
+            actions: all
+          - resource: clusterconfig
+            actions: all
+          - resource: topic
+            value: .*
+            actions: all
+          - resource: consumer
+            value: .*
+            actions: all
+          - resource: schema
+            value: .*
+            actions: all
+          - resource: connect
+            value: .*
+            actions: all
+          - resource: ksql
+            actions: all
+          - resource: acl
+            actions: all
+      - name: readonly
+        clusters:
+          - <environment name>
+        subjects:
+          - provider: oauth_google
+            type: domain
+            value: "example.com"
+        permissions:
+          - resource: clusterconfig
+            actions:
+              - view
+          - resource: topic
+            value: .*
+            actions:
+              - VIEW
+              - MESSAGES_READ
+          - resource: consumer
+            value: .*
+            actions:
+              - view
+          - resource: schema
+            value: .*
+            actions:
+              - view
+          - resource: connect
+            value: .*
+            actions:
+              - view
+          - resource: acl
+            actions:
+              - view
+  management:
+    health:
+      ldap:
+        enabled: false
+
+Steps-4: 
+Add the repo from document https://docs.kafka-ui.provectus.io/configuration/helm-charts/quick-start
+	helm repo add kafka-ui https://provectus.github.io/kafka-ui-charts
+Install kafka-ui
+	helm upgrade -i kafka-ui kafka-ui/kafka-ui -n kafka-ui -f values.yaml
+
+Steps-5: 
+Create Load Balancer in GCP console on respective environment
+- Go to the GCP Console, click on the navigation menu.
+- Select Network services → Load Balancer
+- Click on create load balancer, fill details for frontend, backend services and health check details.
+- Save the load balancer.
+Once up the service, add new Port to load balancer backend services and health check.
+
+Steps-6:    
+Create firewall rule
+In Dev firewall rule: https://console.cloud.google.com/net-security/firewall-manager/firewall-policies/details/kafka-ui-allow?project=tenfold-developer
+Add ip to WAF rule
+Create DNS name in AWS route53
+
+
+
